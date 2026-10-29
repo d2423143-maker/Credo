@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credo (CRD) - Mi Moneda</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: white; padding: 20px; text-align: center; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { background: #00ff88; color: black; border: none; padding: 12px 20px; border-radius: 5px; font-weight: bold; width: 100%; cursor: pointer; }
+        button:disabled { background: #555; color: #999; }
+        .saldo { font-size: 40px; color: #00ff88; font-weight: bold; }
+        .hash { font-size: 10px; color: #888; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+    <h2>🪙 Credo (CRD)</h2>
+
+    <div class="card" id="setup">
+        <h3>Crear tu Billetera</h3>
+        <p>Genera tus claves seguras para empezar.</p>
+        <button onclick="crearBilletera()">Crear mi Billetera Segura</button>
+    </div>
+
+    <div class="card" id="wallet" style="display:none;">
+        <h3>Tu Saldo</h3>
+        <div class="saldo"><span id="saldo">0</span> CRD</div>
+        <p class="hash">Tu dirección:<br><span id="miClave"></span></p>
+    </div>
+
+    <div class="card" id="enviar" style="display:none;">
+        <h3>Enviar Monedas</h3>
+        <input type="text" id="destino" placeholder="Pega la dirección del receptor">
+        <input type="number" id="monto" placeholder="Cantidad a enviar">
+        <button onclick="enviarMonedas()">Firmar y Enviar</button>
+        <p id="mensaje" style="color: #00ff88; margin-top: 10px;"></p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.11/dist/bundles/libsodium.min.js"></script>
+    <script>
+        let miLlavePrivada = null;
+        let miLlavePublica = null;
+        let miNonce = 0;
+
+        // Iniciar criptografía
+        async function init() {
+            await sodium.ready;
+            let guardado = localStorage.getItem('credo_wallet');
+            if (guardado) {
+                let data = JSON.parse(guardado);
+                miLlavePublica = data.publica;
+                miLlavePrivada = data.privada;
+                miNonce = data.nonce;
+                mostrarBilletera();
+            }
+        }
+
+        function crearBilletera() {
+            // Generar claves Ed25519 (Seguridad real)
+            let keypair = sodium.crypto_sign_keypair();
+            miLlavePublica = sodium.to_hex(keypair.publicKey);
+            miLlavePrivada = sodium.to_hex(keypair.privateKey);
+            miNonce = 0;
+            
+            // Te regalamos 100 CRD para empezar (simulado en tu móvil)
+            let data = { publica: miLlavePublica, privada: miLlavePrivada, nonce: miNonce, saldo: 100 };
+            localStorage.setItem('credo_wallet', JSON.stringify(data));
+            
+            mostrarBilletera();
+        }
+
+        function mostrarBilletera() {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('wallet').style.display = 'block';
+            document.getElementById('enviar').style.display = 'block';
+            document.getElementById('miClave').innerText = miLlavePublica;
+            
+            let data = JSON.parse(localStorage.getItem('credo_wallet'));
+            document.getElementById('saldo').innerText = data.saldo || 0;
+        }
+
+        function enviarMonedas() {
+            let destino = document.getElementById('destino').value;
+            let monto = parseFloat(document.getElementById('monto').value);
+            let msg = document.getElementById('mensaje');
+
+            if (!destino || !monto || monto <= 0) {
+                msg.innerText = "❌ Llena los datos bien.";
+                msg.style.color = "red";
+                return;
+            }
+
+            let data = JSON.parse(localStorage.getItem('credo_wallet'));
+            if (data.saldo < monto) {
+                msg.innerText = "❌ No tienes suficiente saldo.";
+                msg.style.color = "red";
+                return;
+            }
+
+            // Firmar la transacción criptográficamente
+            miNonce++;
+            let mensajeFirmar = JSON.stringify({ de: miLlavePublica, a: destino, monto: monto, nonce: miNonce });
+            let firma = sodium.to_hex(sodium.crypto_sign_detached(mensajeFirmar, sodium.from_hex(miLlavePrivada)));
+
+            // Descontar saldo y guardar
+            data.saldo -= monto;
+            data.nonce = miNonce;
+            localStorage.setItem('credo_wallet', JSON.stringify(data));
+
+            document.getElementById('saldo').innerText = data.saldo;
+            msg.innerText = "✅ ¡Enviado! Firma: " + firma.substring(0, 15) + "...";
+            msg.style.color = "#00ff88";
+            
+            document.getElementById('destino').value = "";
+            document.getElementById('monto').value = "";
+        }
+
+        init();
+    </script>
+</body>
+</html>
